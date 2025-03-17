@@ -6,21 +6,37 @@ from PyQt6.QtWidgets import (
 import whisper
 
 def remove_ads(transcription_result):
-    """Filter out ad-related segments from transcription."""
+    """Filter out ad-related segments from transcription more robustly."""
     ad_keywords = [
         "sponsored by", "brought to you by", "thanks to our sponsor",
-        "use promo code", "limited-time offer", "our partnership with"
+        "use promo code", "limited-time offer", "our partnership with",
+        "let's take a quick break", "before we continue", "this episode is sponsored by"
     ]
     
     filtered_segments = []
-    
-    for segment in transcription_result["segments"]:
+    skip_next = 0  # Tracks whether to skip upcoming segments
+
+    for i, segment in enumerate(transcription_result["segments"]):
         segment_text = segment["text"].lower()
-        if not any(keyword in segment_text for keyword in ad_keywords):
-            filtered_segments.append(segment_text)
+        duration = segment["end"] - segment["start"]  # Length of the segment
+
+        # If we previously flagged an ad, skip this segment
+        if skip_next > 0:
+            skip_next -= 1
+            continue  
+
+        # Check if the segment contains an ad keyword
+        if any(keyword in segment_text for keyword in ad_keywords):
+            skip_next = 2  # Skip the next 2 segments (adjust as needed)
+            continue
+
+        # Remove long ad-like segments (e.g., longer than 15 seconds or >40 words)
+        if duration > 15 or len(segment_text.split()) > 40:
+            continue
+
+        filtered_segments.append(segment_text)
 
     return " ".join(filtered_segments)
-
 class TranscriptionApp(QWidget):
     def __init__(self):
         super().__init__()
